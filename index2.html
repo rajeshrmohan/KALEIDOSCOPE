@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Kaleidoscope</title>
+    <style>
+        /* Basic CSS Reset and Setup */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            background-color: #000;
+        }
+
+        /* Canvas fills the entire screen */
+        #kaleidoscopeCanvas {
+            display: block;
+            background-color: #000;
+        }
+
+        /* Simple instruction text */
+        #instructions {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 14px;
+            pointer-events: none; /* Allows mouse events to pass through to the canvas */
+            text-shadow: 0 0 5px black;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="kaleidoscopeCanvas"></canvas>
+    <div id="instructions">Move your mouse to draw. Click to change the pattern.</div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('kaleidoscopeCanvas');
+            const ctx = canvas.getContext('2d');
+
+            let width, height, centerX, centerY;
+            
+            // --- Configuration ---
+            let numSlices = 12; // Initial number of kaleidoscope slices. Click to change.
+            const sliceOptions = [6, 8, 10, 12, 14, 16, 20];
+            let sliceIndex = 3;
+
+            const mouse = {
+                x: window.innerWidth / 2,
+                y: window.innerHeight / 2,
+                isDown: false
+            };
+
+            let hue = 0; // For cycling colors
+            let time = 0; // A counter for animation patterns
+
+            // --- Setup ---
+            function setup() {
+                width = canvas.width = window.innerWidth;
+                height = canvas.height = window.innerHeight;
+                centerX = width / 2;
+                centerY = height / 2;
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            // --- Event Listeners ---
+            function addEventListeners() {
+                window.addEventListener('resize', setup);
+
+                canvas.addEventListener('mousemove', (e) => {
+                    mouse.x = e.clientX;
+                    mouse.y = e.clientY;
+                });
+
+                canvas.addEventListener('mousedown', () => {
+                    mouse.isDown = true;
+                });
+                
+                canvas.addEventListener('mouseup', () => {
+                    mouse.isDown = false;
+                });
+
+                canvas.addEventListener('click', () => {
+                    // Cycle through the slice options
+                    sliceIndex = (sliceIndex + 1) % sliceOptions.length;
+                    numSlices = sliceOptions[sliceIndex];
+                });
+            }
+
+            // --- The Drawing Logic ---
+            
+            /**
+             * This function draws a single segment of the pattern.
+             * It will be rotated and mirrored by the main animation loop.
+             */
+            function drawPatternSegment() {
+                // Map mouse coordinates to be relative to the center
+                const relativeMouseX = mouse.x - centerX;
+                const relativeMouseY = mouse.y - centerY;
+                
+                // Use time and mouse position to create complex, evolving shapes
+                const radius = Math.sqrt(relativeMouseX*relativeMouseX + relativeMouseY*relativeMouseY);
+                const angle = Math.atan2(relativeMouseY, relativeMouseX);
+
+                const size1 = Math.sin(time * 0.05) * 50 + radius * 0.2;
+                const size2 = Math.cos(time * 0.03) * 30 + radius * 0.15;
+                
+                ctx.save();
+                // We move the origin to the mouse position within the first "slice"
+                ctx.translate(relativeMouseX, relativeMouseY);
+                ctx.rotate(time * 0.5);
+
+                // Draw a few shapes
+                for (let i = 0; i < 5; i++) {
+                    ctx.rotate(Math.PI * 2 / 5);
+                    
+                    // Main shape
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(size1, size1);
+                    ctx.lineTo(0, size2);
+                    ctx.closePath();
+                    ctx.strokeStyle = `hsl(${hue + i * 10}, 80%, 60%)`;
+                    ctx.lineWidth = 1 + Math.sin(time + i) * 2;
+                    ctx.stroke();
+
+                    // Inner shape
+                    ctx.beginPath();
+                    ctx.arc(size2 * 0.5, size2 * 0.5, Math.abs(size1 * 0.1), 0, Math.PI * 2);
+                    ctx.fillStyle = `hsla(${hue + i * 20 + 180}, 90%, 70%, 0.5)`;
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+            // --- Animation Loop ---
+            function animate() {
+                // 1. Create the fading trail effect by drawing a semi-transparent background
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, width, height);
+
+                // 2. The Kaleidoscope Magic!
+                const angleStep = (Math.PI * 2) / numSlices;
+                
+                for (let i = 0; i < numSlices; i++) {
+                    ctx.save();
+                    
+                    // Move origin to the center of the canvas
+                    ctx.translate(centerX, centerY);
+                    
+                    // Rotate for the current slice
+                    ctx.rotate(i * angleStep);
+                    
+                    // Draw the pattern
+                    drawPatternSegment();
+                    
+                    // **This is the key:** Mirror the canvas for the reflection
+                    ctx.scale(1, -1);
+                    drawPatternSegment();
+                    
+                    ctx.restore();
+                }
+
+                // 3. Update animation variables
+                hue = (hue + 0.5) % 360;
+                time += 0.01;
+
+                // 4. Request the next frame
+                requestAnimationFrame(animate);
+            }
+
+            // --- Let's Go! ---
+            setup();
+            addEventListeners();
+            animate();
+        });
+    </script>
+
+</body>
+</html>

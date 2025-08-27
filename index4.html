@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Animated Kaleidoscope</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000000;
+            cursor: pointer;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="kaleidoscopeCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('kaleidoscopeCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- Core Settings ---
+        const slices = 12; // To match the 12-point symmetry
+        const angle = (Math.PI * 2) / slices;
+        const numParticles = 80; // Increased for more complexity
+        const particles = [];
+        const centerPull = 0.001; // How strongly particles are drawn to the center
+        const friction = 0.97; // Slows particles down over time
+
+        // --- Off-screen canvas for drawing the source pattern ---
+        const sourceCanvas = document.createElement('canvas');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        const sourceSize = 400; // Increased source resolution
+        sourceCanvas.width = sourceSize;
+        sourceCanvas.height = sourceSize;
+
+        let width, height, centerX, centerY;
+        let globalHue = 290; // Start in the magenta/purple range
+        let kaleidoscopeAngle = 0; // For rotating the entire kaleidoscope
+        let time = 0; // For the breathing/zoom effect
+
+        const mouse = {
+            x: null,
+            y: null,
+            active: false
+        };
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * sourceSize;
+                this.y = Math.random() * sourceSize;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.life = 0;
+                this.maxLife = Math.random() * 200 + 100;
+                this.type = Math.random() > 0.3 ? 'streak' : 'orb'; // 70% streaks, 30% orbs
+
+                if (Math.random() < 0.15) {
+                    this.hue = 50 + Math.random() * 20; // Yellow/Lime accent
+                } else {
+                    this.hue = globalHue + (Math.random() - 0.5) * 80; // Magenta/Purple/Blue
+                }
+            }
+
+            update() {
+                // Attract to center
+                const dxCenter = sourceSize / 2 - this.x;
+                const dyCenter = sourceSize / 2 - this.y;
+                this.vx += dxCenter * centerPull;
+                this.vy += dyCenter * centerPull;
+
+                // Attract to mouse
+                if (mouse.active) {
+                    const dxMouse = mouse.x - this.x;
+                    const dyMouse = mouse.y - this.y;
+                    this.vx += dxMouse * 0.005; // Stronger pull for mouse
+                    this.vy += dyMouse * 0.005;
+                }
+                
+                this.vx *= friction;
+                this.vy *= friction;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life++;
+
+                if (this.life >= this.maxLife) {
+                    this.reset();
+                }
+            }
+
+            draw(context) {
+                // Fade in at the start, fade out at the end
+                const opacity = Math.sin((this.life / this.maxLife) * Math.PI);
+                const color = `hsla(${this.hue % 360}, 100%, 65%, ${opacity * 0.8})`;
+                
+                context.shadowColor = color;
+                context.shadowBlur = 15;
+
+                if (this.type === 'streak') {
+                    context.strokeStyle = color;
+                    context.lineWidth = Math.max(1, opacity * 4);
+                    context.beginPath();
+                    context.moveTo(this.x - this.vx * 3, this.y - this.vy * 3);
+                    context.lineTo(this.x, this.y);
+                    context.stroke();
+                } else { // 'orb'
+                    context.fillStyle = color;
+                    context.beginPath();
+                    context.arc(this.x, this.y, Math.max(1, opacity * 4), 0, Math.PI * 2);
+                    context.fill();
+                }
+            }
+        }
+
+        function setup() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            centerX = width / 2;
+            centerY = height / 2;
+
+            if (particles.length === 0) {
+                 for (let i = 0; i < numParticles; i++) {
+                    particles.push(new Particle());
+                }
+            }
+        }
+        
+        function triggerReset() {
+            globalHue += 90 + Math.random() * 60; // Jump to a new color family
+            sourceCtx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Clear with a stronger fade
+            sourceCtx.fillRect(0, 0, sourceSize, sourceSize);
+            particles.forEach(p => p.reset());
+        }
+
+        function animate() {
+            // --- 1. Update Source Canvas ---
+            sourceCtx.save();
+            sourceCtx.globalCompositeOperation = 'source-over';
+            sourceCtx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+            sourceCtx.fillRect(0, 0, sourceSize, sourceSize);
+            sourceCtx.restore();
+
+            particles.forEach(p => {
+                p.update();
+                p.draw(sourceCtx);
+            });
+
+            // --- 2. Render Kaleidoscope on Main Canvas ---
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
+            ctx.save();
+            ctx.translate(centerX, centerY);
+
+            // Add global rotation and zoom/breathe effect
+            kaleidoscopeAngle += 0.001;
+            time += 0.01;
+            const currentScale = 1.0 + Math.sin(time) * 0.05; // Gentle zoom
+            ctx.rotate(kaleidoscopeAngle);
+            ctx.scale(currentScale, currentScale);
+
+            for (let i = 0; i < slices; i++) {
+                ctx.rotate(angle);
+                
+                ctx.save();
+                ctx.scale(1, -1); // Mirror for symmetry
+                ctx.drawImage(sourceCanvas, -width / 2, -height / 2, width, height);
+                ctx.restore();
+                
+                ctx.drawImage(sourceCanvas, -width / 2, -height / 2, width, height);
+            }
+
+            ctx.restore();
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('resize', setup);
+        canvas.addEventListener('click', triggerReset);
+        
+        canvas.addEventListener('mousemove', e => {
+            mouse.active = true;
+            // Convert screen coordinates to source canvas coordinates
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = sourceSize / canvasRect.width;
+            const scaleY = sourceSize / canvasRect.height;
+            mouse.x = (e.clientX - canvasRect.left) * scaleX;
+            mouse.y = (e.clientY - canvasRect.top) * scaleY;
+        });
+
+        canvas.addEventListener('mouseout', () => {
+            mouse.active = false;
+        });
+
+        // --- Start the show ---
+        setup();
+        animate();
+    </script>
+</body>
+</html>
